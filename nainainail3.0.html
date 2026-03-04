@@ -17,6 +17,7 @@
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideDownAlert { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translate(-50%, 0); } }
         .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
         .animate-slideUp { animation: slideUp 0.4s ease-out; }
     </style>
@@ -24,34 +25,70 @@
 <body class="bg-[#F8DEE5]">
     <div id="root"></div>
 
-    <!-- Firebase SDK (模組化引入) -->
+    <!-- 客製化彈窗與複製功能 (因應預覽環境限制) -->
+    <script>
+        // 覆寫預設的 alert，改用好看的自訂提示框
+        window.alert = function(message) {
+            const alertBox = document.createElement('div');
+            alertBox.style.cssText = `
+                position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+                background-color: rgba(99, 70, 77, 0.95); color: white;
+                padding: 16px 24px; border-radius: 12px; z-index: 99999;
+                font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                animation: slideDownAlert 0.3s ease-out; max-width: 80%; text-align: center;
+                white-space: pre-wrap;
+            `;
+            alertBox.innerText = message;
+            document.body.appendChild(alertBox);
+            setTimeout(() => {
+                alertBox.style.opacity = '0';
+                alertBox.style.transition = 'opacity 0.3s ease-out';
+                setTimeout(() => document.body.removeChild(alertBox), 300);
+            }, 3500);
+        };
+
+        // 預覽環境安全的剪貼簿複製功能
+        window.fallbackCopyTextToClipboard = function(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('複製失敗', err);
+            }
+            document.body.removeChild(textArea);
+        };
+    </script>
+
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // =========================================================================
-        // 🔴 請在這裡填入你的 Firebase 設定 (若要啟用多裝置同步，請申請 Firebase 並填寫)
-        // 申請教學：到 firebase.google.com -> 新增專案 -> 新增 Web App -> 複製 config
-        // =========================================================================
         const firebaseConfig = {
-            // apiKey: "你的_API_KEY",
-            // authDomain: "你的專案ID.firebaseapp.com",
-            // projectId: "你的專案ID",
-            // storageBucket: "你的專案ID.firebasestorage.app",
-            // messagingSenderId: "...",
-            // appId: "..."
+            apiKey: "AIzaSyAqvJjN0FrL5Cu3c6ijC2lQ594rMojSjdU",
+            authDomain: "nainainail.firebaseapp.com",
+            projectId: "nainainail",
+            storageBucket: "nainainail.firebasestorage.app",
+            messagingSenderId: "3869474467",
+            appId: "1:3869474467:web:9581f5a36aee467e920916",
+            measurementId: "G-0LHTJ6MLVS"
         };
-        // =========================================================================
 
         let db = null;
         let auth = null;
         let isCloudEnabled = false;
 
-        // 嘗試初始化 Firebase
         if (firebaseConfig.apiKey) {
             try {
                 const app = initializeApp(firebaseConfig);
+                const RECAPTCHA_SITE_KEY = "6LeGfX4sAAAAAAAOKTdC4TTQejIVF1_edRlAZulx";
                 auth = getAuth(app);
                 db = getFirestore(app);
                 isCloudEnabled = true;
@@ -63,7 +100,6 @@
             console.warn("⚠️ 未偵測到 Firebase 設定，將使用 LocalStorage (僅限本機儲存)");
         }
 
-        // 將變數掛載到 window 供 React 使用
         window.db = db;
         window.auth = auth;
         window.isCloudEnabled = isCloudEnabled;
@@ -73,7 +109,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- 圖示組件 (保持不變) ---
+        // --- 圖示組件 ---
         const Sparkles = (props) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 9h4"/><path d="M3 5h4"/></svg>);
         const Check = (props) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="20 6 9 17 4 12"/></svg>);
         const ChevronLeft = (props) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m15 18-6-6 6-6"/></svg>);
@@ -101,7 +137,7 @@
                 category: "美甲服務",
                 icon: Star,
                 items: [
-                    { id: 'b1', name: '手部', price: 0, desc: '' },                   
+                    { id: 'b1', name: '手部', price: 0, desc: '' },                    
                     { id: 'b2', name: '足部', price: 0, desc: '' },
                     { id: 'b3', name: '單色凝膠', price: 900, time: '90分鐘', desc: '含基礎保養' },
                     { id: 'b4', name: '貓眼凝膠', price: 1100, time: '100分鐘', desc: '含基礎保養' },
@@ -178,9 +214,6 @@
             return months;
         };
 
-        // --- 組件部分 (ServiceStep, DateStep, InfoStep, SuccessStep, BookingSystem, AdminPanel) 保持不變，但在 AdminPanel 增加儲存邏輯 ---
-        
-        // ... (ServiceStep, InfoStep, SuccessStep 程式碼與之前完全相同，省略以節省篇幅) ...
         const ServiceStep = ({ booking, updateBooking, nextStep, prevStep }) => {
             const [activeCategoryIdx, setActiveCategoryIdx] = useState(0);
             const handleCardClick = (item) => {
@@ -255,7 +288,7 @@
             const monthData = calendarData[viewMonthIndex];
             return (
                 <div className="animate-slideUp pb-16">
-                    <div className="mb-6 text-center"><h3 className="text-xl font-bold" style={{ color: COLORS.text }}>預約時間</h3><p className="text-xs mt-1 opacity-70" style={{ color: COLORS.text }}>&lt;時段可微調，預約完成請回line告知&gt;</p></div>
+                    <div className="mb-6 text-center"><h3 className="text-xl font-bold" style={{ color: COLORS.text }}>預約時間</h3><p className="text-xs mt-1 opacity-70" style={{ color: COLORS.text }}>【時段可微調，預約完成請回line告知】</p></div>
                     <div className="mb-6 space-y-6">
                         <div className="bg-white rounded-xl shadow-sm border p-4 transition-all" style={{ borderColor: COLORS.accent }}>
                             <div className="flex justify-between items-center mb-4 px-2">
@@ -310,7 +343,14 @@
             const bookingCode = `#MT${Math.floor(Math.random() * 10000)}`;
             const handleLineShare = () => {
                 const message = `【nainai nail 預約單】\n--------------------\n預約代號：${bookingCode}\n姓名：${booking.name}\n電話：${booking.phone}\n日期：${booking.date?.formatted} (${booking.date?.weekday})\n時間：${booking.time}\n服務項目：\n${booking.services.map(s => `- ${s.name}${s.quantity > 1 ? ' x'+s.quantity : ''} ($${s.price * (s.quantity || 1)})`).join('\n')}\n預估金額：$${totalPrice}\n備註事項：${booking.note || '無'}\n--------------------\n(此訊息由預約系統自動產生)`;
-                navigator.clipboard.writeText(message).then(() => { alert("✅ 預約資訊已複製！\n\n即將開啟 LINE，請在對話框中「貼上」並傳送訊息給我們確認喔！"); window.open('https://lin.ee/VUrTCMY', '_blank'); });
+                
+                // 使用修改後的複製功能以符合預覽畫布環境
+                window.fallbackCopyTextToClipboard(message);
+                window.alert("✅ 預約資訊已複製！\n\n即將為您開啟 LINE，請在對話框中「貼上」並傳送訊息給我們確認喔！"); 
+                
+                setTimeout(() => {
+                    window.open('https://lin.ee/VUrTCMY', '_blank');
+                }, 2000);
             };
             return (
                 <div className="flex flex-col items-center justify-center text-center animate-fadeIn py-10">
@@ -434,14 +474,13 @@
             const db = window.db;
             const auth = window.auth;
 
-            // 初始化 (雲端或本地)
+            // 初始化
             useEffect(() => {
                 if (isCloud) {
                     signInAnonymously(auth).catch(console.error);
                     const unsubscribe = onAuthStateChanged(auth, setUser);
                     return () => unsubscribe();
                 } else {
-                    // 本地模式：讀取 LocalStorage
                     try {
                         const savedDates = JSON.parse(localStorage.getItem('nainai_blockedDates') || '[]');
                         const savedTimes = JSON.parse(localStorage.getItem('nainai_blockedTimes') || '{}');
@@ -449,7 +488,6 @@
                         setBlockedTimes(savedTimes);
                     } catch(e) { console.error(e); }
                     
-                    // 本地模式：監聽 storage 事件以同步同一瀏覽器的分頁
                     const handleStorageChange = () => {
                         try {
                             const newDates = JSON.parse(localStorage.getItem('nainai_blockedDates') || '[]');
@@ -477,20 +515,19 @@
                 return () => unsubscribe();
             }, [isCloud, user]);
 
-            // 統一儲存函式
             const saveSettings = async (newDates, newTimes) => {
                 if (isCloud) {
                     if (!user) return;
                     const settingsRef = doc(db, 'nainai_settings', 'blocked_data');
                     try {
                         await setDoc(settingsRef, { blockedDates: newDates, blockedTimes: newTimes }, { merge: true });
-                    } catch (error) { alert("儲存失敗"); }
+                        window.alert("儲存成功！");
+                    } catch (error) { window.alert("儲存失敗，請檢查網路狀態"); }
                 } else {
-                    // 本地模式儲存
                     localStorage.setItem('nainai_blockedDates', JSON.stringify(newDates));
                     localStorage.setItem('nainai_blockedTimes', JSON.stringify(newTimes));
-                    // 手動觸發事件讓其他分頁更新
                     window.dispatchEvent(new Event('storage'));
+                    window.alert("儲存成功 (本機端)！");
                 }
             };
 
@@ -500,7 +537,7 @@
                     setShowLoginModal(false);
                     setPasswordInput('');
                 } else {
-                    alert('密碼錯誤');
+                    window.alert('密碼錯誤！');
                 }
             };
 
@@ -515,7 +552,7 @@
                         <div className="text-center py-6 text-white rounded-b-3xl shadow-md z-20 flex-shrink-0 relative" style={{ backgroundColor: COLORS.primary }}>
                             <h1 className="text-2xl font-bold tracking-widest">nainai nail</h1>
                             <p className="text-sm opacity-90 mt-1">您的專屬美甲服務資訊</p>
-                            <div className="absolute top-4 right-4" title={isCloud ? "雲端同步中" : "僅本機儲存 (填入 Config 以啟用雲端)"}>
+                            <div className="absolute top-4 right-4" title={isCloud ? "雲端同步中" : "僅本機儲存"}>
                                 {isCloud ? <Cloud className="w-5 h-5 text-green-200" /> : <CloudOff className="w-5 h-5 text-red-200" />}
                             </div>
                         </div>
@@ -553,7 +590,7 @@
                                         <h3 className="font-bold border-b-2 border-dashed pb-2 mb-3" style={{ color: COLORS.primary }}>💅 其他設計</h3>
                                         <ul className="text-sm space-y-2 pl-2" style={{ color: COLORS.text }}>
                                             <li className="border-l-4 pl-2" style={{ borderColor: COLORS.accent }}>造型設計：每指 100 ~ 250 元起</li>
-                                            <li className="border-l-4 pl-2" style={{ borderColor: COLORS.accent }}>立體翻模：每個 150 元起</li>
+                                            <li className="border-l-4 pl-2" style={{ borderColor: COLORS.accent }}>立體翻模：每個 250 元起</li>
                                             <li className="border-l-4 pl-2" style={{ borderColor: COLORS.accent }}>手繪：每指 50 ~ 250 元起</li>
                                             <li className="border-l-4 pl-2" style={{ borderColor: COLORS.accent }}>貼紙/飾品：每個 10 元起</li>
                                             <li className="border-l-4 pl-2" style={{ borderColor: COLORS.accent }}>延甲服務：每指 100 元</li>
