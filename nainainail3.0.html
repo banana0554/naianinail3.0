@@ -4,13 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nainai nail 預約系統 (雙模式版)</title>
-    <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 React 與 ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- 引入 Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
     
     <style>
         .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -25,8 +23,13 @@
 <body class="bg-[#F8DEE5]">
     <div id="root"></div>
 
-    <!-- 客製化彈窗與複製功能 (因應預覽環境限制) -->
     <script>
+        // 預防 Firebase 載入失敗的防呆機制
+        window.db = null;
+        window.auth = null;
+        window.isCloudEnabled = false;
+        window.firebaseFunctions = {};
+
         // 覆寫預設的 alert，改用好看的自訂提示框
         window.alert = function(message) {
             const alertBox = document.createElement('div');
@@ -65,7 +68,6 @@
         };
     </script>
 
-    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -88,7 +90,6 @@
         if (firebaseConfig.apiKey) {
             try {
                 const app = initializeApp(firebaseConfig);
-                const RECAPTCHA_SITE_KEY = "6LeGfX4sAAAAAAAOKTdC4TTQejIVF1_edRlAZulx";
                 auth = getAuth(app);
                 db = getFirestore(app);
                 isCloudEnabled = true;
@@ -103,16 +104,9 @@
         window.db = db;
         window.auth = auth;
         window.isCloudEnabled = isCloudEnabled;
-        window.firebaseFunctions =｛ signInAnonymously, onAuthStateChanged, doc, setDoc, onSnapshot };
+        window.firebaseFunctions = { signInAnonymously, onAuthStateChanged, doc, setDoc, onSnapshot };
     </script>
-// 加入這四行，確保最一開始就不會是 undefined
-        window.db = null;
-        window.auth = null;
-        window.isCloudEnabled = false;
-        window.firebaseFunctions = {};
 
-        // 覆寫預設的 alert，改用好看的自訂提示框
-        window.alert = function(message) {
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
@@ -351,7 +345,6 @@
             const handleLineShare = () => {
                 const message = `【nainai nail 預約單】\n--------------------\n預約代號：${bookingCode}\n姓名：${booking.name}\n電話：${booking.phone}\n日期：${booking.date?.formatted} (${booking.date?.weekday})\n時間：${booking.time}\n服務項目：\n${booking.services.map(s => `- ${s.name}${s.quantity > 1 ? ' x'+s.quantity : ''} ($${s.price * (s.quantity || 1)})`).join('\n')}\n預估金額：$${totalPrice}\n備註事項：${booking.note || '無'}\n--------------------\n(此訊息由預約系統自動產生)`;
                 
-                // 使用修改後的複製功能以符合預覽畫布環境
                 window.fallbackCopyTextToClipboard(message);
                 window.alert("✅ 預約資訊已複製！\n\n即將為您開啟 LINE，請在對話框中「貼上」並傳送訊息給我們確認喔！"); 
                 
@@ -475,18 +468,21 @@
             const [blockedDates, setBlockedDates] = useState([]);
             const [blockedTimes, setBlockedTimes] = useState({});
             
-            // 雲端模式狀態
+            // 雲端模式狀態與 Firebase 解構 (已修復)
             const isCloud = window.isCloudEnabled || false;
-            const { signInAnonymously, onAuthStateChanged, doc, setDoc, onSnapshot } = window.firebaseFunctions || {};
+            const firebaseTools = window.firebaseFunctions || {};
+            const { signInAnonymously, onAuthStateChanged, doc, setDoc, onSnapshot } = firebaseTools;
             const db = window.db || null;
             const auth = window.auth || null;
 
             // 初始化
             useEffect(() => {
-                if (isCloud) {
-                    signInAnonymously(auth).catch(console.error);
-                    const unsubscribe = onAuthStateChanged(auth, setUser);
-                    return () => unsubscribe();
+                if (isCloud && auth) {
+                    if(signInAnonymously) signInAnonymously(auth).catch(console.error);
+                    if(onAuthStateChanged) {
+                        const unsubscribe = onAuthStateChanged(auth, setUser);
+                        return () => unsubscribe();
+                    }
                 } else {
                     try {
                         const savedDates = JSON.parse(localStorage.getItem('nainai_blockedDates') || '[]');
@@ -506,11 +502,11 @@
                     window.addEventListener('storage', handleStorageChange);
                     return () => window.removeEventListener('storage', handleStorageChange);
                 }
-            }, [isCloud]);
+            }, [isCloud, auth, signInAnonymously, onAuthStateChanged]);
 
             // 雲端資料同步監聽
             useEffect(() => {
-                if (!isCloud || !user) return;
+                if (!isCloud || !user || !db || !onSnapshot || !doc) return;
                 const settingsRef = doc(db, 'nainai_settings', 'blocked_data');
                 const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -520,10 +516,10 @@
                     }
                 });
                 return () => unsubscribe();
-            }, [isCloud, user]);
+            }, [isCloud, user, db, onSnapshot, doc]);
 
             const saveSettings = async (newDates, newTimes) => {
-                if (isCloud) {
+                if (isCloud && db && setDoc && doc) {
                     if (!user) return;
                     const settingsRef = doc(db, 'nainai_settings', 'blocked_data');
                     try {
