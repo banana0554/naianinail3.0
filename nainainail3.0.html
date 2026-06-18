@@ -103,9 +103,16 @@
         window.db = db;
         window.auth = auth;
         window.isCloudEnabled = isCloudEnabled;
-        window.firebaseFunctions = { signInAnonymously, onAuthStateChanged, doc, setDoc, onSnapshot };
+        window.firebaseFunctions =｛ signInAnonymously, onAuthStateChanged, doc, setDoc, onSnapshot };
     </script>
+// 加入這四行，確保最一開始就不會是 undefined
+        window.db = null;
+        window.auth = null;
+        window.isCloudEnabled = false;
+        window.firebaseFunctions = {};
 
+        // 覆寫預設的 alert，改用好看的自訂提示框
+        window.alert = function(message) {
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
@@ -469,10 +476,10 @@
             const [blockedTimes, setBlockedTimes] = useState({});
             
             // 雲端模式狀態
-            const isCloud = window.isCloudEnabled;
-            const { signInAnonymously, onAuthStateChanged, doc, setDoc, onSnapshot } = window.firebaseFunctions;
-            const db = window.db;
-            const auth = window.auth;
+            const isCloud = window.isCloudEnabled || false;
+            const { signInAnonymously, onAuthStateChanged, doc, setDoc, onSnapshot } = window.firebaseFunctions || {};
+            const db = window.db || null;
+            const auth = window.auth || null;
 
             // 初始化
             useEffect(() => {
